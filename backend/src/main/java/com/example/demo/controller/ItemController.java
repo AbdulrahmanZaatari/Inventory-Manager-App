@@ -1,6 +1,4 @@
-// src/main/java/com/example/demo/controller/ItemController.java
 package com.example.demo.controller;
-
 import com.example.demo.model.Item;
 import com.example.demo.repository.ItemRepository;
 import jakarta.validation.Valid;
@@ -19,7 +17,8 @@ import java.util.Optional;
 public class ItemController {
 
     private final ItemRepository itemRepository;
-    private final MongoTemplate mongoTemplate; 
+    private final MongoTemplate mongoTemplate;
+
     @Autowired
     public ItemController(ItemRepository itemRepository, MongoTemplate mongoTemplate) {
         this.itemRepository = itemRepository;
@@ -28,17 +27,11 @@ public class ItemController {
 
     @GetMapping
     public List<Item> getAllItems(
-            @RequestParam(required = false) String name,
             @RequestParam(required = false) Double minPrice,
             @RequestParam(required = false) Double maxPrice) {
 
         Query query = new Query();
-        Criteria criteria = new Criteria();
         List<Criteria> criteriaList = new ArrayList<>();
-
-        if (name != null && !name.trim().isEmpty()) {
-            criteriaList.add(Criteria.where("name").regex(name.trim(), "i"));
-        }
 
         if (minPrice != null && maxPrice != null) {
             criteriaList.add(Criteria.where("price").gte(minPrice).lte(maxPrice));
@@ -49,8 +42,7 @@ public class ItemController {
         }
 
         if (!criteriaList.isEmpty()) {
-            criteria.andOperator(criteriaList.toArray(new Criteria[0]));
-            query.addCriteria(criteria);
+            query.addCriteria(new Criteria().andOperator(criteriaList.toArray(new Criteria[0])));
         }
 
         return mongoTemplate.find(query, Item.class);
@@ -83,7 +75,6 @@ public class ItemController {
         existingItem.setDescription(updatedItem.getDescription());
         existingItem.setPrice(updatedItem.getPrice());
         existingItem.setQuantity(updatedItem.getQuantity());
-        
 
         return ResponseEntity.ok(itemRepository.save(existingItem));
     }

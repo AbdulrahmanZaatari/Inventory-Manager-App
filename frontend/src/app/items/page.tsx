@@ -1,8 +1,7 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'; // Import useCallback
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import debounce from 'lodash.debounce';
 
 type Item = {
   id: string;
@@ -28,37 +27,31 @@ export default function ItemsPage() {
     quantity: ''
   });
 
-  // State for filters
-  const [searchTerm, setSearchTerm] = useState('');
-  const [minPrice, setMinPrice] = useState('');
-  const [maxPrice, setMaxPrice] = useState('');
+  const [inputMinPrice, setInputMinPrice] = useState('');
+  const [inputMaxPrice, setInputMaxPrice] = useState('');
 
-  // Use useCallback for debounced fetchItems to avoid re-creating the function
-  const fetchItems = useCallback(async (
-    term: string = searchTerm,
-    min: string = minPrice,
-    max: string = maxPrice
-  ) => {
-    setError(''); // Clear previous errors
+  const [currentMinPrice, setCurrentMinPrice] = useState('');
+  const [currentMaxPrice, setCurrentMaxPrice] = useState('');
+
+
+  const fetchItems = useCallback(async () => {
+    setError('');
     setLoading(true);
     try {
       const queryParams = new URLSearchParams();
-      if (term) {
-        queryParams.append('name', term);
+      if (currentMinPrice) {
+        queryParams.append('minPrice', currentMinPrice);
       }
-      if (min) {
-        queryParams.append('minPrice', min);
-      }
-      if (max) {
-        queryParams.append('maxPrice', max);
+      if (currentMaxPrice) {
+        queryParams.append('maxPrice', currentMaxPrice);
       }
 
       const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/items?${queryParams.toString()}`;
       const res = await fetch(url);
 
       if (!res.ok) {
-         const errorData = await res.json();
-         throw new Error(errorData.message || `HTTP error! status: ${res.status}`);
+        const errorData = await res.json();
+        throw new Error(errorData.message || `HTTP error! status: ${res.status}`);
       }
 
       const data = await res.json();
@@ -68,34 +61,27 @@ export default function ItemsPage() {
     } finally {
       setLoading(false);
     }
-  }, [searchTerm, minPrice, maxPrice]); // Dependencies for useCallback
+  }, [currentMinPrice, currentMaxPrice]);
 
-  // Debounced version of fetchItems for the search input
-  const debouncedFetchItems = useCallback(debounce(fetchItems, 500), [fetchItems]); // Debounce with 500ms delay
+  const applyFilters = () => {
+    setCurrentMinPrice(inputMinPrice);
+    setCurrentMaxPrice(inputMaxPrice);
+  };
 
-  // Redirect and initial fetch
+  const clearFilters = () => {
+    setInputMinPrice('');
+    setInputMaxPrice('');
+    setCurrentMinPrice('');
+    setCurrentMaxPrice('');
+  };
+
   useEffect(() => {
-    if (typeof window !== 'undefined' && localStorage.getItem('auth') !== 'true') {
+    if (localStorage.getItem('auth') !== 'true') {
       router.push('/login');
     } else {
-      // Initial fetch without filters on page load
-      fetchItems('', '', '');
+      fetchItems();
     }
-  }, [router, fetchItems]); // Added fetchItems to dependency array
-
-  // Effect to refetch items when filters change (except for search term, which is debounced)
-   useEffect(() => {
-    // Only trigger refetch for price filters when they change
-    if (minPrice !== '' || maxPrice !== '') {
-        fetchItems();
-    } else if (minPrice === '' && maxPrice === '' && searchTerm === '' && items.length > 0) {
-         // If all filters are cleared and items are already loaded, refetch to get all items
-        fetchItems();
-    } else if (minPrice === '' && maxPrice === '' && searchTerm === '' && items.length === 0 && !loading) {
-        // If all filters are cleared and no items are loaded, and not currently loading, fetch
-         fetchItems();
-    }
-   }, [minPrice, maxPrice, fetchItems]); // Dependencies include price filters and fetchItems
+  }, [router, fetchItems]);
 
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -103,13 +89,13 @@ export default function ItemsPage() {
     if (submitting) return;
 
     setSubmitting(true);
-    setError(''); // Clear previous errors
+    setError('');
 
     const payload = {
       name: form.name,
       description: form.description,
       price: parseFloat(form.price),
-      quantity: parseInt(form.quantity, 10) // Use radix 10
+      quantity: parseInt(form.quantity, 10)
     }
 
     try {
@@ -126,15 +112,14 @@ export default function ItemsPage() {
       });
 
       if (!res.ok) {
-         const errorData = await res.json();
-         throw new Error(errorData.message || 'Failed to save item');
+        const errorData = await res.json();
+        throw new Error(errorData.message || 'Failed to save item');
       }
 
-      // Clear form and reset edit mode
       setForm({ name: '', description: '', price: '', quantity: '' });
       setEditMode(false);
       setEditId(null);
-      fetchItems(); // Refresh the list with current filters
+      fetchItems();
     } catch (e: any) {
       setError(editMode ? `Failed to update item: ${e.message}` : `Failed to add item: ${e.message}`);
     } finally {
@@ -143,28 +128,28 @@ export default function ItemsPage() {
   }
 
   const handleDelete = async (id: string) => {
-     if (!confirm('Are you sure you want to delete this item?')) {
-        return;
-     }
-    setError(''); // Clear previous errors
+    if (!confirm('Are you sure you want to delete this item?')) {
+      return;
+    }
+    setError('');
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/items/${id}`, {
         method: 'DELETE'
       });
 
       if (!res.ok) {
-         const errorData = await res.json();
-         throw new Error(errorData.message || 'Failed to delete item');
+        const errorData = await res.json();
+        throw new Error(errorData.message || 'Failed to delete item');
       }
 
-      fetchItems(); // Refresh the list with current filters
+      fetchItems();
     } catch (e: any) {
       setError(`Failed to delete item: ${e.message}`);
     }
   }
 
   const handleEdit = (item: Item) => {
-    setError(''); // Clear previous errors
+    setError('');
     setEditMode(true);
     setEditId(item.id);
     setForm({
@@ -176,29 +161,18 @@ export default function ItemsPage() {
   }
 
   const handleLogout = () => {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('auth');
-      router.push('/login');
-    }
+    localStorage.removeItem('auth');
+    router.push('/login');
   }
 
-  // Handle search input change with debounce
-  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const term = e.target.value;
-    setSearchTerm(term);
-    debouncedFetchItems(term, minPrice, maxPrice); // Pass current filter values
+  const handlePriceInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    if (name === 'minPrice') {
+      setInputMinPrice(value);
+    } else {
+      setInputMaxPrice(value);
+    }
   };
-
-   // Handle price filter changes (not debounced, usually triggered by blur or explicit action)
-   const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const { name, value } = e.target;
-      if (name === 'minPrice') {
-         setMinPrice(value);
-      } else {
-         setMaxPrice(value);
-      }
-      // fetchItems is called via the useEffect dependency on minPrice/maxPrice
-   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-400 to-teal-400 py-10 font-sans">
@@ -210,7 +184,7 @@ export default function ItemsPage() {
           </div>
           <button
             onClick={handleLogout}
-            className="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50"
+            className="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition duration-200 ease-in-out"
           >
             Logout
           </button>
@@ -223,66 +197,62 @@ export default function ItemsPage() {
           </div>
         )}
 
-        {/* Filter Section */}
         <div className="mb-8 p-4 bg-gray-100 dark:bg-gray-700 rounded-lg shadow-inner">
-            <h3 className="text-lg font-semibold mb-4 text-gray-700 dark:text-gray-200">Filter Items</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="md:col-span-3">
-                    <label htmlFor="searchTerm" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Search by Name:</label>
-                    <input
-                        id="searchTerm"
-                        type="text"
-                        placeholder="e.g., Laptop, Mouse"
-                        value={searchTerm}
-                        onChange={handleSearchChange}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-600 dark:border-gray-500 dark:text-white dark:focus:ring-blue-600 dark:focus:border-blue-600"
-                         aria-label="Search by Item Name"
-                    />
-                </div>
-                <div className="md:col-span-3 grid grid-cols-2 gap-4">
-                     <div>
-                         <label htmlFor="minPrice" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Min Price:</label>
-                         <input
-                            id="minPrice"
-                            type="number"
-                            name="minPrice"
-                            placeholder="e.g., 10.00"
-                            value={minPrice}
-                            onChange={handlePriceChange}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-600 dark:border-gray-500 dark:text-white dark:focus:ring-blue-600 dark:focus:border-blue-600"
-                            min="0"
-                             step="0.01"
-                             aria-label="Minimum Price"
-                         />
-                     </div>
-                     <div>
-                        <label htmlFor="maxPrice" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Max Price:</label>
-                         <input
-                            id="maxPrice"
-                            type="number"
-                            name="maxPrice"
-                            placeholder="e.g., 100.00"
-                            value={maxPrice}
-                            onChange={handlePriceChange}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-600 dark:border-gray-500 dark:text-white dark:focus:ring-blue-600 dark:focus:border-blue-600"
-                            min="0"
-                             step="0.01"
-                             aria-label="Maximum Price"
-                         />
-                     </div>
-                </div>
+          <h3 className="text-lg font-semibold mb-4 text-gray-700 dark:text-gray-200">Filter Items by Price</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="minPrice" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Min Price:</label>
+              <input
+                id="minPrice"
+                type="number"
+                name="minPrice"
+                placeholder="e.g., 10.00"
+                value={inputMinPrice}
+                onChange={handlePriceInputChange}
+                className="w-full px-4 py-2 border border-gray-300 rounded-md dark:bg-gray-600 dark:border-gray-500 dark:text-white"
+                min="0"
+                step="0.01"
+              />
             </div>
+            <div>
+              <label htmlFor="maxPrice" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Max Price:</label>
+              <input
+                id="maxPrice"
+                type="number"
+                name="maxPrice"
+                placeholder="e.g., 100.00"
+                value={inputMaxPrice}
+                onChange={handlePriceInputChange}
+                className="w-full px-4 py-2 border border-gray-300 rounded-md dark:bg-gray-600 dark:border-gray-500 dark:text-white"
+                min="0"
+                step="0.01"
+              />
+            </div>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-4 mt-4">
+            <button
+              onClick={applyFilters}
+              className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 dark:bg-blue-700 dark:hover:bg-blue-800"
+            >
+              Apply Filters
+            </button>
+            <button
+              onClick={clearFilters}
+              className="flex-1 bg-gray-300 text-gray-800 py-2 px-4 rounded-md hover:bg-gray-400 transition duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-50 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
+            >
+              Clear Filters
+            </button>
+          </div>
         </div>
 
-
         <div className="mb-8">
-           <h2 className="text-2xl font-semibold mb-4 text-gray-700 dark:text-gray-200">
-             Inventory Items
+          <h2 className="text-2xl font-semibold mb-4 text-gray-700 dark:text-gray-200">
+            Inventory Items
           </h2>
           {loading ? (
             <p className="text-gray-600 dark:text-gray-300 text-center">Loading items...</p>
           ) : items.length === 0 ? (
-            <p className="text-gray-500 italic text-center">No items found with the current filters.</p>
+            <p className="text-gray-500 italic text-center">No items found with the current filters. Try adjusting your price range or add new items!</p>
           ) : (
             <ul className="space-y-4">
               {items.map(item => (
@@ -293,10 +263,10 @@ export default function ItemsPage() {
                       <p className="text-sm text-gray-600 dark:text-gray-400">{item.description}</p>
                       <div className="flex items-center mt-2 text-sm text-gray-700 dark:text-gray-300">
                         <span className="mr-4">
-                           <span className="font-medium">Price:</span> ${item.price.toFixed(2)}
+                          <span className="font-medium">Price:</span> ${item.price.toFixed(2)}
                         </span>
                         <span>
-                           <span className="font-medium">Quantity:</span> {item.quantity}
+                          <span className="font-medium">Quantity:</span> {item.quantity}
                         </span>
                       </div>
                       <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
@@ -314,7 +284,7 @@ export default function ItemsPage() {
                       <button
                         onClick={() => handleDelete(item.id)}
                         className="bg-red-500 text-white px-3 py-1 text-sm rounded-md hover:bg-red-600 transition duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50"
-                         aria-label={`Delete ${item.name}`}
+                        aria-label={`Delete ${item.name}`}
                       >
                         Delete
                       </button>
@@ -354,10 +324,10 @@ export default function ItemsPage() {
               placeholder="Price"
               value={form.price}
               onChange={(e) => setForm({ ...form, price: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:focus:ring-indigo-600 dark:focus:border-indigo-600"
+              className="w-full px-4 py-2 border border-gray-300 rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white"
               required
-              min="0" // Added min attribute
-              step="0.01" // Added step for decimal prices
+              min="0"
+              step="0.01"
               aria-label="Item Price"
             />
             <input
@@ -365,9 +335,9 @@ export default function ItemsPage() {
               placeholder="Quantity"
               value={form.quantity}
               onChange={(e) => setForm({ ...form, quantity: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:focus:ring-indigo-600 dark:focus:border-indigo-600"
+              className="w-full px-4 py-2 border border-gray-300 rounded-md"
               required
-              min="0" // Added min attribute
+              min="0"
               aria-label="Item Quantity"
             />
 
@@ -398,7 +368,7 @@ export default function ItemsPage() {
                     setEditMode(false)
                     setEditId(null)
                     setForm({ name: '', description: '', price: '', quantity: '' })
-                    setError(''); // Clear error on cancel
+                    setError('');
                   }}
                   className={`w-full sm:w-auto flex-1 text-gray-700 dark:text-gray-200 py-2 px-4 rounded-md transition duration-200 ease-in-out focus:outline-none focus:ring-2 ${
                     submitting
